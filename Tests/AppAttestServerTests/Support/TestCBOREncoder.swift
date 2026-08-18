@@ -1,7 +1,17 @@
 import Foundation
 
 /// A tiny CBOR encoder for building test fixtures.
-indirect enum TestCBOR {
+///
+/// All self-references go through `Array`, so the enum needs no `indirect`
+/// boxing — and the map payload is a named struct rather than a tuple of
+/// `TestCBOR`, because a self-referential tuple payload trips a spurious
+/// "circular reference" error in the Swift 6.1 compiler.
+enum TestCBOR {
+    struct MapEntry {
+        var key: TestCBOR
+        var value: TestCBOR
+    }
+
     case unsigned(UInt64)
     /// Encodes the CBOR negative integer `-1 - magnitude`.
     case negative(UInt64)
@@ -9,7 +19,12 @@ indirect enum TestCBOR {
     case text(String)
     case array([TestCBOR])
     /// Ordered key-value pairs, encoded in the given order.
-    case map([(TestCBOR, TestCBOR)])
+    case mapEntries([MapEntry])
+
+    /// Ordered key-value pairs, keeping tuple syntax at call sites.
+    static func map(_ pairs: [(TestCBOR, TestCBOR)]) -> TestCBOR {
+        .mapEntries(pairs.map { MapEntry(key: $0.0, value: $0.1) })
+    }
 
     /// Convenience for small signed integers (COSE uses -1, -2, -3, -7).
     static func int(_ value: Int) -> TestCBOR {
@@ -31,9 +46,9 @@ indirect enum TestCBOR {
             return elements.reduce(Self.header(major: 4, argument: UInt64(elements.count))) {
                 $0 + $1.encoded
             }
-        case .map(let pairs):
-            return pairs.reduce(Self.header(major: 5, argument: UInt64(pairs.count))) {
-                $0 + $1.0.encoded + $1.1.encoded
+        case .mapEntries(let entries):
+            return entries.reduce(Self.header(major: 5, argument: UInt64(entries.count))) {
+                $0 + $1.key.encoded + $1.value.encoded
             }
         }
     }
