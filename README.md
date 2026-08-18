@@ -20,7 +20,7 @@ API documentation is published at [tixster.github.io/swift-app-attest](https://t
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/tixster/swift-app-attest.git", from: "0.1.0"),
+    .package(url: "https://github.com/tixster/swift-app-attest.git", from: "1.0.0"),
 ],
 targets: [
     // In your app target:
