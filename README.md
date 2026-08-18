@@ -102,6 +102,13 @@ let configuration = AppAttestConfiguration(
     environments: [.production]  // add .development for Xcode builds
 )
 
+// Inside your enrollment endpoint (Vapor shown; any framework works).
+// AttestationPayload is the shared Codable DTO the client example sends.
+let payload = try req.content.decode(AttestationPayload.self)
+guard let storedChallenge = try await cache.getAndDelete("attest:\(userID)") else {
+    throw Abort(.badRequest)
+}
+
 let verifier = AttestationVerifier(configuration: configuration)
 let result = try await verifier.verify(
     attestation: payload.attestation,
@@ -116,6 +123,10 @@ let result = try await verifier.verify(
 ### Verifying an assertion
 
 ```swift
+// Inside a protected endpoint: decode the payload, look up the key it names.
+let payload = try req.content.decode(AssertionPayload.self)
+let storedKey = try await keys.find(payload.keyID)  // public key + counter from enrollment
+
 let verifier = AssertionVerifier(configuration: configuration)
 let result = try verifier.verify(
     assertion: payload.assertion,

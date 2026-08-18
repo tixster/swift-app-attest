@@ -13,6 +13,11 @@ Your server verifies the assertion with ``AssertionVerifier``, using the
 public key and counter stored at enrollment:
 
 ```swift
+// Decode the request body your app sent — for example, the shared
+// `AssertionPayload` DTO — and look up the key it names:
+let payload = try req.content.decode(AssertionPayload.self)
+let storedKey = try await keys.find(payload.keyID)
+
 let verifier = AssertionVerifier(configuration: configuration)
 let result = try verifier.verify(
     assertion: payload.assertion,

@@ -19,6 +19,10 @@ let configuration = AppAttestConfiguration(
     environments: [.production]
 )
 
+// Decode the request body your app sent — for example, the shared
+// `AttestationPayload` DTO (Vapor shown; any framework works):
+let payload = try req.content.decode(AttestationPayload.self)
+
 let verifier = AttestationVerifier(configuration: configuration)
 let result = try await verifier.verify(
     attestation: payload.attestation,
