@@ -1,6 +1,7 @@
 # swift-app-attest
 
 [![CI](https://github.com/tixster/swift-app-attest/actions/workflows/ci.yml/badge.svg)](https://github.com/tixster/swift-app-attest/actions/workflows/ci.yml)
+[![Documentation](https://github.com/tixster/swift-app-attest/actions/workflows/docs.yml/badge.svg)](https://tixster.github.io/swift-app-attest/documentation/)
 [![Swift 6.1+](https://img.shields.io/badge/Swift-6.1%2B-F05138?logo=swift&logoColor=white)](https://swift.org)
 [![Platforms](https://img.shields.io/badge/Platforms-iOS%2014%2B%20%7C%20macOS%2011%2B%20%7C%20tvOS%2015%2B%20%7C%20watchOS%209%2B%20%7C%20visionOS%201%2B%20%7C%20Linux-blue)](#installation)
 [![SPM](https://img.shields.io/badge/SPM-compatible-brightgreen)](Package.swift)
@@ -12,6 +13,8 @@ A Swift library for [Apple App Attest](https://developer.apple.com/documentation
 - **`AppAttestServer`** — server-side verification for macOS and Linux: attestation objects, assertion objects, receipts, and the fraud-assessment (risk metric) exchange with Apple.
 
 The server target implements every step of Apple's guides [*Validating apps that connect to your server*](https://developer.apple.com/documentation/devicecheck/validating-apps-that-connect-to-your-server) and [*Assessing fraud risk*](https://developer.apple.com/documentation/devicecheck/assessing-fraud-risk), including the macOS access-control policy check and the `apple_validation_category_01` / `apple_bundle_version_01` authenticator-data extensions.
+
+API documentation is published at [tixster.github.io/swift-app-attest](https://tixster.github.io/swift-app-attest/documentation/).
 
 ## Installation
 
