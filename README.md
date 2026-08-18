@@ -16,6 +16,28 @@ The server target implements every step of Apple's guides [*Validating apps that
 
 API documentation is published at [tixster.github.io/swift-app-attest](https://tixster.github.io/swift-app-attest/documentation/).
 
+## What App Attest does
+
+App Attest lets your server verify that a request came from an **unmodified copy of your app on a genuine Apple device**: the app signs requests with a key that lives in the device's Secure Enclave, and Apple certifies that the key was created there by your app. It identifies an *app install*, not a person — use it alongside (not instead of) user authentication. Typical wins: keeping bots, scrapers, and modified clients off your API.
+
+The vocabulary, in one pass:
+
+| Term | What it is |
+|---|---|
+| **Challenge** | A random one-time value your server issues. Signing it proves the response was made just now, not replayed. |
+| **Key ID** | The identifier of the key pair the app created. Not a secret — the server uses it to look the key up. |
+| **Attestation** | A one-time, Apple-certified proof that the key is genuine. Sent once, at *enrollment*. |
+| **Assertion** | A signature over a request made with the attested key. Sent with every protected request afterwards. |
+| **Client data** | The exact bytes the app signed for an assertion — typically your request body with the challenge embedded. |
+| **Receipt / risk metric** | Optional: a token exchangeable with Apple for the approximate number of keys attested on that device — a fraud signal. |
+
+## Before you start
+
+- Add the **App Attest capability** to your app target in Xcode (the `com.apple.developer.devicecheck.appattest-environment` entitlement). Builds run from Xcode get the `development` environment; TestFlight, App Store, and enterprise builds get `production`.
+- App Attest needs a **real device**: on simulators `isSupported` is `false`, so keep a fallback path.
+- Enrollment needs **network access** — `attestKey` contacts Apple's servers. Generating assertions afterwards is fully local.
+- Your server needs your **10-character Team ID** (Apple Developer → Membership) and the app's **bundle ID** — attestations for any other app are rejected.
+
 ## Installation
 
 ```swift
@@ -38,9 +60,11 @@ The server product depends on [swift-crypto](https://github.com/apple/swift-cryp
 
 ## The flow at a glance
 
+Enrollment (steps 1–3) happens once per app install; assertions (step 4) accompany protected requests from then on.
+
 1. The app asks your server for a one-time random **challenge**.
 2. The app generates a key (`generateKey`), hashes the challenge, and calls `attestKey`. It sends the **attestation object** and **key ID** to your server.
-3. Your server verifies the attestation (`AttestationVerifier`) and stores the public key, counter, and receipt for that user/device.
+3. Your server verifies the attestation (`AttestationVerifier`) and stores the public key, counter, and receipt for that key ID.
 4. For sensitive requests, the app fetches a fresh challenge, embeds it in the request (**client data**), and signs it with `generateAssertion`. Your server verifies the assertion (`AssertionVerifier`) against the stored key and counter.
 5. Optionally, your server exchanges the stored receipt with Apple (`FraudAssessmentClient`) to obtain a **risk metric** — the approximate number of keys attested on that device in the last 30 days.
 
@@ -57,7 +81,7 @@ guard service.isSupported else {
 
 // Enrollment (once per install):
 let challenge = try await api.fetchChallenge()
-let keyID = try await service.generateKey()          // persist this
+let keyID = try await service.generateKey()          // persist this (not a secret — UserDefaults is fine)
 let attestation = try await service.attestKey(keyID, challenge: challenge)
 try await api.enroll(AttestationPayload(keyID: keyID, attestation: attestation))
 
@@ -70,7 +94,7 @@ try await api.send(AssertionPayload(keyID: keyID, assertion: assertion, clientDa
 
 The `challenge:` / `clientData:` variants hash with SHA-256 for you; the raw `clientDataHash:` pass-throughs are also available.
 
-All methods throw typed errors (`async throws(AppAttestClientError)`), so exhaustive handling over `error.code` needs no casting. On `.invalidKey`, discard the stored key ID, generate a new key, and re-attest — App Attest keys don't survive re-installs, backup restores, or device transfers.
+All methods throw typed errors (`async throws(AppAttestClientError)`), so exhaustive handling over `error.code` needs no casting. Two codes you should always handle: `.serverUnavailable` is transient (Apple couldn't be reached — retry with backoff), and `.invalidKey` means the key is gone — discard the stored key ID, generate a new one, and re-attest. Key loss is normal: App Attest keys don't survive re-installs, backup restores, or device transfers.
 
 `AttestationPayload` / `AssertionPayload` are optional `Codable` DTOs shared with the server target; use your own wire format if you prefer.
 
@@ -100,9 +124,9 @@ guard let challenge = try await cache.getAndDelete("attest:\(userID)") else {
 import AppAttestServer
 
 let configuration = AppAttestConfiguration(
-    teamIdentifier: "A1B2C3D4E5",
+    teamIdentifier: "A1B2C3D4E5",       // Apple Developer → Membership
     bundleIdentifier: "com.example.app",
-    environments: [.production]  // add .development for Xcode builds
+    environments: [.production]         // add .development for builds run from Xcode
 )
 
 // Inside your enrollment endpoint (Vapor shown; any framework works).
@@ -119,7 +143,9 @@ let result = try await verifier.verify(
     challenge: storedChallenge  // the raw challenge you issued, now single-use
 )
 
-// Persist for this user + device:
+// Persist, keyed by the key ID (one row per app install — App Attest has no
+// device ID or user identity; the attested key itself plays that role). If your
+// service has accounts, also associate the row with the authenticated user:
 // result.publicKeyX963Representation, result.signCount, result.receipt, result.environment
 ```
 
@@ -127,6 +153,8 @@ let result = try await verifier.verify(
 
 ```swift
 // Inside a protected endpoint: decode the payload, look up the key it names.
+// `storedKey` comes from your database (saved at enrollment); `storedChallenge`
+// was issued and cached per request, same flow as during enrollment.
 let payload = try req.content.decode(AssertionPayload.self)
 let storedKey = try await keys.find(payload.keyID)  // public key + counter from enrollment
 
@@ -147,6 +175,8 @@ storedKey.signCount = result.signCount  // persist the new counter
 If the client signs the bare challenge (`clientData == challenge`), omit `challengeExtractor`.
 
 ### Receipts and fraud assessment
+
+This part is optional — attestations and assertions work without ever touching receipts. Use it when you want Apple's fraud signal:
 
 ```swift
 // Verify the receipt that came with the attestation (Apple recommends
@@ -188,7 +218,7 @@ A high risk metric can indicate a compromised device serving many copies of your
 
 - **Challenges must be single-use.** Generate a random value per enrollment/request (`AppAttestChallenge.generate()`), remember it server-side, and invalidate it after one verification attempt.
 - **Persist and enforce the counter.** Reject assertions whose counter isn't strictly greater than the stored one (the library checks this for you when you pass `previousSignCount`).
-- **One key, one user.** Reject enrollment if the attested public key is already associated with a different account.
+- **One key, one user** (if you bind keys to accounts). Reject enrollment if the attested public key is already associated with a different account. Accountless services skip this and instead watch per-key behavior and the fraud-risk metric.
 - **Keep environments separate.** Development attestations, receipts, and metrics are invalid in production and vice versa.
 - **Attest keys again on `invalidKey`.** Client-side key loss is normal (re-install, restore, transfer); treat re-attestation as a regular flow.
 

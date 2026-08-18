@@ -10,6 +10,11 @@ metric*: the approximate number of keys attested for your app on that device
 over the past 30 days. An unexpectedly high number can indicate a compromised
 device serving assertions to many copies of your app.
 
+This whole flow is optional — attestations and assertions verify fine without
+receipts. It also requires one piece of setup: an App Store Connect API key
+with the DeviceCheck service enabled, used to authenticate against Apple's
+endpoint.
+
 ## Verifying receipts
 
 Verify a receipt — including the one that accompanies an attestation — with

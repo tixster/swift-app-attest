@@ -4,11 +4,15 @@ Validate the attestation object a client sends at enrollment and store the attes
 
 ## Overview
 
-Enrollment starts on the client: the app asks your server for a one-time
-challenge, generates an App Attest key, and calls
-`DCAppAttestService.attestKey(_:clientDataHash:)` with the SHA-256 hash of the
-challenge. It then sends the resulting attestation object and the key
-identifier to your server.
+Enrollment is a one-time step per app install. It starts on the client: the
+app asks your server for a one-time challenge, generates an App Attest key,
+and calls `DCAppAttestService.attestKey(_:clientDataHash:)` with the SHA-256
+hash of the challenge. It then sends the resulting attestation object and the
+key identifier to your server.
+
+Expect re-enrollment as a normal event: App Attest keys don't survive app
+re-installs, backup restores, or device transfers, so the same physical device
+will eventually return with a brand-new key.
 
 Your server verifies the attestation with ``AttestationVerifier``:
 
@@ -41,7 +45,11 @@ protected by SIP and Full Security mode.
 
 ## Storing the result
 
-Persist these values, keyed by user and device:
+Persist these values, keyed by the key identifier. App Attest exposes no
+device ID or user identity — the attested key itself identifies one app
+install on one device. If your service has accounts, also associate the row
+with the authenticated user and expect one row per device a user enrolls
+from; accountless services simply treat the key as an anonymous install:
 
 - ``VerifiedAttestation/publicKeyX963Representation`` (or the
   ``VerifiedAttestation/publicKey``) — needed to verify assertions.
@@ -50,8 +58,8 @@ Persist these values, keyed by user and device:
 - ``VerifiedAttestation/environment`` — keep development and production data
   apart.
 
-As an added replay protection, reject enrollment when the public key is
-already associated with another user.
+As an added replay protection when you bind keys to accounts, reject
+enrollment when the public key is already associated with another user.
 
 ## Challenges
 

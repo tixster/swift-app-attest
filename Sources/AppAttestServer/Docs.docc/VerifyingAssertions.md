@@ -9,6 +9,10 @@ assertion: the app packages the request as *client data* (embedding a fresh
 server challenge), hashes it, and signs it with the attested key via
 `DCAppAttestService.generateAssertion(_:clientDataHash:)`.
 
+Unlike attestation, this involves no round-trip to Apple: the app signs
+locally, and verification happens entirely on your server — so the
+per-request overhead is one challenge fetch plus one signature check.
+
 Your server verifies the assertion with ``AssertionVerifier``, using the
 public key and counter stored at enrollment:
 
