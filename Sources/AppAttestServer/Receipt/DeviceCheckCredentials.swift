@@ -4,9 +4,12 @@ import Foundation
 /// The credentials used to authenticate against Apple's fraud-assessment
 /// endpoint.
 ///
-/// Create a key in App Store Connect (Users and Access → Integrations →
-/// Keys) with the DeviceCheck service enabled, and download its `.p8` file.
-public struct AppStoreConnectCredentials: Sendable {
+/// Create the key in the Apple Developer portal — Certificates, Identifiers &
+/// Profiles → Keys → Create a key — with the **DeviceCheck** service enabled,
+/// and download its `.p8` file. (This is the same kind of key used for the
+/// DeviceCheck server API and APNs provider tokens, not an App Store Connect
+/// API key.)
+public struct DeviceCheckCredentials: Sendable {
     /// The 10-character identifier of the key (`kid` JWT header).
     public let keyIdentifier: String
 

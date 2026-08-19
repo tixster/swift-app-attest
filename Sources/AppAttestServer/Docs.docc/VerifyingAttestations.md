@@ -8,13 +8,33 @@ Enrollment is a one-time step per app install. It starts on the client: the
 app asks your server for a one-time challenge, generates an App Attest key,
 and calls `DCAppAttestService.attestKey(_:clientDataHash:)` with the SHA-256
 hash of the challenge. It then sends the resulting attestation object and the
-key identifier to your server.
+key identifier to your server, where ``AttestationVerifier`` validates them
+and hands you the key material to persist.
 
 Expect re-enrollment as a normal event: App Attest keys don't survive app
-re-installs, backup restores, or device transfers, so the same physical device
-will eventually return with a brand-new key.
+re-installs, backup restores, or device transfers, so the same physical
+device will eventually return with a brand-new key.
 
-Your server verifies the attestation with ``AttestationVerifier``:
+## Issuing challenges
+
+Every enrollment starts from a challenge your server issued. Challenges must
+be unpredictable and single-use: generate one with
+``AppAttestChallenge/generate(byteCount:)``, remember it server-side with a
+short TTL, and invalidate it after the first verification attempt —
+successful or not.
+
+Two ways to find the challenge again when the client comes back:
+
+- **Bound to a user or session** — store it under the requester's identity
+  and look it up when the enrollment request arrives.
+- **Remembered by value** — for services without accounts or sessions, keep
+  issued challenges in a store keyed by their own value and have the client
+  echo the challenge back alongside the attestation (the shared
+  `EnrollmentPayload` DTO carries exactly that trio: challenge, key ID,
+  attestation). Echoing is safe: the challenge isn't a secret, a tampered
+  value fails the nonce check, and single-use consumption blocks replays.
+
+## Verifying
 
 ```swift
 let configuration = AppAttestConfiguration(
@@ -60,10 +80,3 @@ from; accountless services simply treat the key as an anonymous install:
 
 As an added replay protection when you bind keys to accounts, reject
 enrollment when the public key is already associated with another user.
-
-## Challenges
-
-Challenges must be unpredictable and single-use. Generate one with
-``AppAttestChallenge/generate(byteCount:)``, remember it server-side with a
-short TTL, and invalidate it after the first verification attempt —
-successful or not.

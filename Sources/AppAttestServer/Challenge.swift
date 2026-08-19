@@ -12,7 +12,7 @@ import Foundation
 /// // GET /app-attest/challenge
 /// let challenge = AppAttestChallenge.generate()
 /// try await cache.set("attest:\(userID)", challenge, ttl: .seconds(300))
-/// return ChallengeResponse(challenge: challenge)
+/// return ChallengePayload(challenge: challenge)
 ///
 /// // POST /app-attest/enroll — consume before verifying, success or not
 /// guard let challenge = try await cache.getAndDelete("attest:\(userID)") else {

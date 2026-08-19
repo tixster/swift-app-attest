@@ -38,7 +38,7 @@ public enum FraudAssessmentError: Error, Sendable, Hashable {
 /// ```swift
 /// let client = FraudAssessmentClient(
 ///     environment: .production,
-///     credentials: try AppStoreConnectCredentials(
+///     credentials: try DeviceCheckCredentials(
 ///         keyIdentifier: "ABC123DEFG",
 ///         teamIdentifier: "A1B2C3D4E5",
 ///         privateKeyPEM: p8FileContents
@@ -61,8 +61,8 @@ public struct FraudAssessmentClient: Sendable {
     /// The environment whose endpoint this client talks to.
     public let environment: AppAttestEnvironment
 
-    /// The App Store Connect credentials used to sign request tokens.
-    public let credentials: AppStoreConnectCredentials
+    /// The DeviceCheck key credentials used to sign request tokens.
+    public let credentials: DeviceCheckCredentials
 
     let httpClient: any AppAttestHTTPClient
 
@@ -70,12 +70,12 @@ public struct FraudAssessmentClient: Sendable {
     ///
     /// - Parameters:
     ///   - environment: The App Attest environment the receipts belong to.
-    ///   - credentials: An App Store Connect key with DeviceCheck enabled.
+    ///   - credentials: A DeviceCheck-enabled key from the Apple Developer portal.
     ///   - httpClient: The transport to use. Defaults to a `URLSession`-backed
     ///     client.
     public init(
         environment: AppAttestEnvironment,
-        credentials: AppStoreConnectCredentials,
+        credentials: DeviceCheckCredentials,
         httpClient: any AppAttestHTTPClient = URLSessionAppAttestHTTPClient()
     ) {
         self.environment = environment

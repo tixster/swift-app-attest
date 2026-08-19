@@ -6,7 +6,7 @@ import Foundation
 /// A thin async wrapper around `DCAppAttestService`.
 ///
 /// The wrapper mirrors the DeviceCheck API one-to-one and adds typed errors
-/// (``AppAttestClientError``) plus the shared ``AppAttestKeyID`` type, so the
+/// (``AppAttestClientError``) plus the shared `AppAttestKeyID` type, so the
 /// values you send to the server line up with what `AppAttestServer` expects.
 ///
 /// A typical enrollment flow:

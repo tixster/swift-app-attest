@@ -9,7 +9,7 @@ import Foundation
 /// payload `{"iss": <team ID>, "iat": <seconds since epoch>}`.
 enum JWTSigner {
     /// Creates a signed token.
-    static func token(credentials: AppStoreConnectCredentials, issuedAt: Date = Date()) throws -> String {
+    static func token(credentials: DeviceCheckCredentials, issuedAt: Date = Date()) throws -> String {
         let header = base64URLEncodedJSON([
             "alg": "ES256",
             "kid": credentials.keyIdentifier,

@@ -11,9 +11,9 @@ over the past 30 days. An unexpectedly high number can indicate a compromised
 device serving assertions to many copies of your app.
 
 This whole flow is optional — attestations and assertions verify fine without
-receipts. It also requires one piece of setup: an App Store Connect API key
-with the DeviceCheck service enabled, used to authenticate against Apple's
-endpoint.
+receipts. It also requires one piece of setup: a private key with the
+DeviceCheck service enabled, created in the Apple Developer portal and used
+to authenticate against Apple's endpoint.
 
 ## Verifying receipts
 
@@ -35,14 +35,15 @@ the decoded payload as an ``AppAttestReceipt``.
 
 ## Requesting the risk metric
 
-``FraudAssessmentClient`` authenticates with an App Store Connect key (create
-it with the DeviceCheck service enabled) and exchanges a stored receipt for a
+``FraudAssessmentClient`` authenticates with a DeviceCheck key — created in
+the Apple Developer portal under Certificates, Identifiers & Profiles → Keys,
+with the DeviceCheck service enabled — and exchanges a stored receipt for a
 refreshed one:
 
 ```swift
 let client = FraudAssessmentClient(
     environment: .production,
-    credentials: try AppStoreConnectCredentials(
+    credentials: try DeviceCheckCredentials(
         keyIdentifier: "ABC123DEFG",
         teamIdentifier: "A1B2C3D4E5",
         privateKeyPEM: p8FileContents

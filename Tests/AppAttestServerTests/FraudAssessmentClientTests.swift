@@ -16,7 +16,7 @@ final class MockHTTPClient: AppAttestHTTPClient, @unchecked Sendable {
 
 @Suite("FraudAssessmentClient")
 struct FraudAssessmentClientTests {
-    let credentials = AppStoreConnectCredentials(
+    let credentials = DeviceCheckCredentials(
         keyIdentifier: "ABC123DEFG",
         teamIdentifier: "TEAM123456",
         privateKey: P256.Signing.PrivateKey()

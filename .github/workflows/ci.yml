@@ -8,12 +8,8 @@ on:
 
 jobs:
   macos:
-    name: macOS (Swift ${{ matrix.xcode == 'latest-stable' && 'latest' || matrix.xcode }})
+    name: macOS
     runs-on: macos-15
-    strategy:
-      fail-fast: false
-      matrix:
-        xcode: [latest-stable]
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode

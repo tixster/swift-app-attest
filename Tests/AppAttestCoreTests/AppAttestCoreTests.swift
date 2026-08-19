@@ -56,6 +56,40 @@ struct TransportDTOTests {
         #expect(decoded == payload)
     }
 
+    @Test func challengePayloadRoundTrip() throws {
+        let payload = ChallengePayload(challenge: Data(repeating: 5, count: 32))
+        let decoded = try JSONDecoder().decode(
+            ChallengePayload.self,
+            from: try JSONEncoder().encode(payload)
+        )
+        #expect(decoded == payload)
+    }
+
+    @Test func enrollmentPayloadRoundTrip() throws {
+        let payload = EnrollmentPayload(
+            challenge: Data(repeating: 9, count: 32),
+            keyID: AppAttestKeyID(rawBytes: Data(repeating: 3, count: 32)),
+            attestation: Data([0xa3, 0x01, 0x02])
+        )
+        let decoded = try JSONDecoder().decode(
+            EnrollmentPayload.self,
+            from: try JSONEncoder().encode(payload)
+        )
+        #expect(decoded == payload)
+    }
+
+    @Test func enrollmentPayloadWrapsAttestationPayload() {
+        let attestation = AttestationPayload(
+            keyID: AppAttestKeyID(rawBytes: Data(repeating: 4, count: 32)),
+            attestation: Data([0x01])
+        )
+        let challenge = Data(repeating: 8, count: 32)
+        let enrollment = EnrollmentPayload(challenge: challenge, payload: attestation)
+        #expect(enrollment.challenge == challenge)
+        #expect(enrollment.keyID == attestation.keyID)
+        #expect(enrollment.attestation == attestation.attestation)
+    }
+
     @Test func assertionPayloadRoundTrip() throws {
         let payload = AssertionPayload(
             keyID: AppAttestKeyID(rawBytes: Data(repeating: 2, count: 32)),

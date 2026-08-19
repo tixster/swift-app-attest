@@ -21,6 +21,52 @@ public struct AttestationPayload: Sendable, Hashable, Codable {
     }
 }
 
+/// A ready-made payload for handing a server-issued challenge to the client.
+///
+/// The only payload that travels server → client: your challenge endpoint
+/// returns it, and the client feeds the challenge into `DCAppAttestService`
+/// calls or embeds it in client data.
+public struct ChallengePayload: Sendable, Hashable, Codable {
+    /// The server-issued challenge. Encodes as a Base64 string in JSON.
+    public var challenge: Data
+
+    /// Creates a challenge payload.
+    public init(challenge: Data) {
+        self.challenge = challenge
+    }
+}
+
+/// A ready-made enrollment payload for the challenge-echo pattern: the client
+/// sends the server-issued challenge back verbatim alongside the attestation,
+/// so the server can look the challenge up by value instead of binding it to
+/// a user or session.
+///
+/// If you bind challenges to authenticated users or sessions instead, the
+/// smaller ``AttestationPayload`` is all you need.
+public struct EnrollmentPayload: Sendable, Hashable, Codable {
+    /// The server-issued challenge, echoed back verbatim.
+    public var challenge: Data
+
+    /// The identifier of the attested key.
+    public var keyID: AppAttestKeyID
+
+    /// The CBOR-encoded attestation object produced by
+    /// `DCAppAttestService.attestKey(_:clientDataHash:)`.
+    public var attestation: Data
+
+    /// Creates an enrollment payload.
+    public init(challenge: Data, keyID: AppAttestKeyID, attestation: Data) {
+        self.challenge = challenge
+        self.keyID = keyID
+        self.attestation = attestation
+    }
+
+    /// Creates an enrollment payload by wrapping an ``AttestationPayload``.
+    public init(challenge: Data, payload: AttestationPayload) {
+        self.init(challenge: challenge, keyID: payload.keyID, attestation: payload.attestation)
+    }
+}
+
 /// A ready-made payload for sending an assertion object from the client to
 /// your server.
 ///

@@ -48,7 +48,7 @@ your Team ID, bundle identifier, and allowed environments.
 - ``ReceiptVerifier``
 - ``AppAttestReceipt``
 - ``FraudAssessmentClient``
-- ``AppStoreConnectCredentials``
+- ``DeviceCheckCredentials``
 
 ### Transport
 
