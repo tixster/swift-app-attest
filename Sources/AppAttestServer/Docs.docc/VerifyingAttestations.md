@@ -24,8 +24,8 @@ let configuration = AppAttestConfiguration(
 )
 
 // Decode the request body your app sent — for example, the shared
-// `AttestationPayload` DTO (Vapor shown; any framework works):
-let payload = try req.content.decode(AttestationPayload.self)
+// `AttestationPayload` DTO (Hummingbird shown; any framework works):
+let payload = try await request.decode(as: AttestationPayload.self, context: context)
 
 let verifier = AttestationVerifier(configuration: configuration)
 let result = try await verifier.verify(

@@ -94,6 +94,8 @@ try await api.send(AssertionPayload(keyID: keyID, assertion: assertion, clientDa
 
 The `challenge:` / `clientData:` variants hash with SHA-256 for you; the raw `clientDataHash:` pass-throughs are also available.
 
+`MyRequest` is your own `Codable` type — any request body works as client data, as long as the server challenge is embedded in it. The signature covers the whole body, so neither your parameters nor the challenge can be tampered with in transit.
+
 All methods throw typed errors (`async throws(AppAttestClientError)`), so exhaustive handling over `error.code` needs no casting. Two codes you should always handle: `.serverUnavailable` is transient (Apple couldn't be reached — retry with backoff), and `.invalidKey` means the key is gone — discard the stored key ID, generate a new one, and re-attest. Key loss is normal: App Attest keys don't survive re-installs, backup restores, or device transfers.
 
 `AttestationPayload` / `AssertionPayload` are optional `Codable` DTOs shared with the server target; use your own wire format if you prefer.
@@ -114,7 +116,7 @@ return ChallengeResponse(challenge: challenge)
 
 // POST /app-attest/enroll — consume the challenge before verifying
 guard let challenge = try await cache.getAndDelete("attest:\(userID)") else {
-    throw Abort(.badRequest)
+    throw HTTPError(.badRequest)
 }
 ```
 
@@ -129,11 +131,11 @@ let configuration = AppAttestConfiguration(
     environments: [.production]         // add .development for builds run from Xcode
 )
 
-// Inside your enrollment endpoint (Vapor shown; any framework works).
+// Inside your enrollment endpoint (Hummingbird shown; any framework works).
 // AttestationPayload is the shared Codable DTO the client example sends.
-let payload = try req.content.decode(AttestationPayload.self)
+let payload = try await request.decode(as: AttestationPayload.self, context: context)
 guard let storedChallenge = try await cache.getAndDelete("attest:\(userID)") else {
-    throw Abort(.badRequest)
+    throw HTTPError(.badRequest)
 }
 
 let verifier = AttestationVerifier(configuration: configuration)
@@ -155,7 +157,7 @@ let result = try await verifier.verify(
 // Inside a protected endpoint: decode the payload, look up the key it names.
 // `storedKey` comes from your database (saved at enrollment); `storedChallenge`
 // was issued and cached per request, same flow as during enrollment.
-let payload = try req.content.decode(AssertionPayload.self)
+let payload = try await request.decode(as: AssertionPayload.self, context: context)
 let storedKey = try await keys.find(payload.keyID)  // public key + counter from enrollment
 
 let verifier = AssertionVerifier(configuration: configuration)
@@ -172,7 +174,20 @@ let result = try verifier.verify(
 storedKey.signCount = result.signCount  // persist the new counter
 ```
 
-If the client signs the bare challenge (`clientData == challenge`), omit `challengeExtractor`.
+`clientData` is opaque to the library — it's hashed, never parsed, so any format works. The extractor is how you tell the verifier where *your* format keeps the challenge (any field name, JSON or not). Three modes:
+
+- `expectedChallenge` + `challengeExtractor` — structured body, extractor pulls the challenge out;
+- `expectedChallenge` only — the client signed the bare challenge (`clientData == challenge`);
+- neither — the built-in check is skipped; validate the challenge yourself.
+
+### When to require assertions
+
+Protect the endpoints where forgery hurts — purchases, premium content, account changes; ordinary traffic doesn't need assertions. Each protected call costs one challenge fetch, and two patterns cheapen that:
+
+- return the **next challenge** in every protected response, so the extra round-trip disappears;
+- or require one assertion to mint a **short-lived session token**, and protect everything else with that token.
+
+Generate assertions **sequentially**: the key's counter must strictly increase, so two signed requests racing each other can arrive out of order and fail the counter check.
 
 ### Receipts and fraud assessment
 
@@ -214,10 +229,190 @@ do {
 
 A high risk metric can indicate a compromised device serving many copies of your app. Note the metric also grows on re-installs and device transfers, so tune thresholds to your traffic.
 
+## Complete example
+
+The snippets above, assembled into working shape. `api`, `sessionID(_:)`, and the types they touch are your app's own pieces; everything else is real library API.
+
+<details>
+<summary><strong>Client: an enrollment + signing manager</strong></summary>
+
+```swift
+import AppAttestClient
+import Foundation
+
+struct PurchaseRequest: Codable {
+    var productID: String
+    var challenge = Data()  // filled in right before signing
+}
+
+/// Owns the App Attest key: enrolls lazily, signs requests, recovers from key loss.
+final class AppAttestManager {
+    private let service = AppAttestService.shared
+    private let api: BackendAPI  // your networking layer
+
+    // The key ID isn't a secret (the private key never leaves the Secure
+    // Enclave), so UserDefaults is fine.
+    private var keyID: AppAttestKeyID? {
+        get { UserDefaults.standard.string(forKey: "appAttestKeyID")
+                .map(AppAttestKeyID.init(base64EncodedString:)) }
+        set { UserDefaults.standard.set(newValue?.base64EncodedString, forKey: "appAttestKeyID") }
+    }
+
+    init(api: BackendAPI) { self.api = api }
+
+    /// Returns the enrolled key ID, running enrollment first if needed.
+    func ensureEnrolled() async throws -> AppAttestKeyID {
+        guard service.isSupported else {
+            throw BackendAPI.Error.appAttestUnavailable  // simulator/old device: fall back
+        }
+        if let keyID { return keyID }
+
+        let challenge = try await api.fetchChallenge()
+        let newKeyID = try await service.generateKey()
+        let attestation = try await service.attestKey(newKeyID, challenge: challenge)
+        try await api.enroll(AttestationPayload(keyID: newKeyID, attestation: attestation))
+        keyID = newKeyID  // persist only after the server accepted the enrollment
+        return newKeyID
+    }
+
+    /// Signs and sends a protected request, re-enrolling transparently on key loss.
+    func send(_ request: PurchaseRequest) async throws -> BackendAPI.Response {
+        var request = request
+        request.challenge = try await api.fetchChallenge()
+        let clientData = try JSONEncoder().encode(request)
+
+        do {
+            let keyID = try await ensureEnrolled()
+            let assertion = try await service.generateAssertion(keyID, clientData: clientData)
+            return try await api.send(
+                AssertionPayload(keyID: keyID, assertion: assertion, clientData: clientData)
+            )
+        } catch let error as AppAttestClientError where error.code == .invalidKey {
+            // The key didn't survive a re-install/restore/transfer. Normal:
+            // drop it and enroll from scratch. (Cap retries in production.)
+            keyID = nil
+            return try await send(request)
+        }
+    }
+}
+```
+
+</details>
+
+<details>
+<summary><strong>Server: challenge, enrollment, and a protected endpoint (Hummingbird)</strong></summary>
+
+```swift
+import AppAttestServer
+import Hummingbird
+
+let configuration = AppAttestConfiguration(
+    teamIdentifier: "A1B2C3D4E5",
+    bundleIdentifier: "com.example.app",
+    environments: [.production]
+)
+let attestations = AttestationVerifier(configuration: configuration)
+let assertions = AssertionVerifier(configuration: configuration)
+
+// In-memory storage to keep the example self-contained; use your database.
+actor AttestedKeyStore {
+    struct Record { var publicKey: Data; var signCount: UInt32; var receipt: Data }
+    private var records: [Data: Record] = [:]     // keyed by raw key ID
+    private var challenges: [String: Data] = [:]  // keyed by session
+
+    func issueChallenge(for session: String) -> Data {
+        let challenge = AppAttestChallenge.generate()
+        challenges[session] = challenge
+        return challenge
+    }
+    func consumeChallenge(for session: String) -> Data? {
+        challenges.removeValue(forKey: session)   // single-use, success or not
+    }
+    func find(_ keyID: AppAttestKeyID) -> Record? {
+        keyID.rawBytes.flatMap { records[$0] }
+    }
+    func save(_ keyID: AppAttestKeyID, _ record: Record) {
+        if let raw = keyID.rawBytes { records[raw] = record }
+    }
+}
+let store = AttestedKeyStore()
+
+struct ChallengeResponse: ResponseCodable {
+    var challenge: Data  // JSON-encodes as a Base64 string
+}
+
+// sessionID(_:) is your session lookup — a cookie, a header, or your auth layer.
+let router = Router()
+
+// 1. Both enrollment and protected requests start by fetching a challenge.
+router.get("app-attest/challenge") { request, _ -> ChallengeResponse in
+    ChallengeResponse(challenge: await store.issueChallenge(for: sessionID(request)))
+}
+
+// 2. Enrollment: verify the attestation, store the key material.
+router.post("app-attest/enroll") { request, context -> HTTPResponse.Status in
+    let payload = try await request.decode(as: AttestationPayload.self, context: context)
+    guard let challenge = await store.consumeChallenge(for: sessionID(request)) else {
+        throw HTTPError(.badRequest, message: "no pending challenge")
+    }
+    let result = try await attestations.verify(
+        attestation: payload.attestation,
+        keyID: payload.keyID,
+        challenge: challenge
+    )
+    await store.save(payload.keyID, .init(
+        publicKey: result.publicKeyX963Representation,
+        signCount: result.signCount,
+        receipt: result.receipt
+    ))
+    return .ok
+}
+
+// 3. A protected endpoint: verify the assertion before doing the work.
+router.post("purchase") { request, context -> HTTPResponse.Status in
+    let payload = try await request.decode(as: AssertionPayload.self, context: context)
+    guard
+        var record = await store.find(payload.keyID),
+        let challenge = await store.consumeChallenge(for: sessionID(request))
+    else {
+        throw HTTPError(.unauthorized)  // same response as a bad signature: no key enumeration
+    }
+
+    let verified: VerifiedAssertion
+    do {
+        verified = try assertions.verify(
+            assertion: payload.assertion,
+            clientData: payload.clientData,
+            publicKeyX963Representation: record.publicKey,
+            previousSignCount: record.signCount,
+            expectedChallenge: challenge,
+            challengeExtractor: {
+                try JSONDecoder().decode(PurchaseRequest.self, from: $0).challenge
+            }
+        )
+    } catch {
+        context.logger.info("assertion rejected: \(error)")
+        throw HTTPError(.unauthorized)  // uniform failure response
+    }
+    record.signCount = verified.signCount  // persist the new counter
+    await store.save(payload.keyID, record)
+
+    // Safe to act on the request now — the signature covered every byte of it.
+    let order = try JSONDecoder().decode(PurchaseRequest.self, from: payload.clientData)
+    try await fulfil(order.productID)
+    return .ok
+}
+
+let app = Application(router: router)
+try await app.runService()
+```
+
+</details>
+
 ## Security notes
 
 - **Challenges must be single-use.** Generate a random value per enrollment/request (`AppAttestChallenge.generate()`), remember it server-side, and invalidate it after one verification attempt.
-- **Persist and enforce the counter.** Reject assertions whose counter isn't strictly greater than the stored one (the library checks this for you when you pass `previousSignCount`).
+- **Persist and enforce the counter.** Reject assertions whose counter isn't strictly greater than the stored one (the library checks this for you when you pass `previousSignCount`). Gaps like 1, 3, 7 are normal — an assertion that never reached you still increments the device counter — so never require consecutive values.
 - **One key, one user** (if you bind keys to accounts). Reject enrollment if the attested public key is already associated with a different account. Accountless services skip this and instead watch per-key behavior and the fraud-risk metric.
 - **Keep environments separate.** Development attestations, receipts, and metrics are invalid in production and vice versa.
 - **Attest keys again on `invalidKey`.** Client-side key loss is normal (re-install, restore, transfer); treat re-attestation as a regular flow.

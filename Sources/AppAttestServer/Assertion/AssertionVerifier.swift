@@ -109,10 +109,11 @@ public struct AssertionVerifier: Sendable {
     ///     this request. When `nil`, the challenge check is skipped and you're
     ///     responsible for validating it yourself.
     ///   - challengeExtractor: How to pull the embedded challenge out of
-    ///     `clientData` — for example, decoding your request format. When
-    ///     `nil`, `clientData` itself is compared to `expectedChallenge`,
-    ///     which suits clients that sign the bare challenge. Errors it throws
-    ///     surface as
+    ///     `clientData` — for example, decoding your request format. The
+    ///     library never parses `clientData` itself, so any format and field
+    ///     name work. When `nil`, `clientData` is compared to
+    ///     `expectedChallenge` directly, which suits clients that sign the
+    ///     bare challenge. Errors it throws surface as
     ///     ``AppAttestVerificationError/challengeExtractionFailed(reason:)``.
     /// - Returns: The verified counter and extension values to persist.
     /// - Throws: ``AppAttestVerificationError`` naming the failed check.
