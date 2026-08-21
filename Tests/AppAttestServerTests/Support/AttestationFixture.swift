@@ -164,6 +164,9 @@ enum AssertionFixture {
         /// iOS 26 sets the `AT` flag in assertion authenticator data without
         /// appending an attested credential data section.
         var spuriousAttestedCredentialDataFlag = false
+        /// Sign the nonce as a *message* (ECDSA-SHA256 hashes it again)
+        /// instead of signing the nonce digest directly.
+        var signsNonceAsMessage = false
     }
 
     static func make(
@@ -198,7 +201,11 @@ enum AssertionFixture {
         if options.corruptSignature {
             message += Data("tampered".utf8)
         }
-        let signature = try key.signature(for: SHA256.hash(data: message))
+        let nonce = SHA256.hash(data: message)
+        let signature =
+            options.signsNonceAsMessage
+            ? try key.signature(for: Data(nonce))
+            : try key.signature(for: nonce)
 
         return TestCBOR.map([
             (.text("signature"), .bytes(signature.derRepresentation)),

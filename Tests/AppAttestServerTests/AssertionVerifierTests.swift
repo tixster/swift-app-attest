@@ -29,6 +29,24 @@ struct AssertionVerifierTests {
         #expect(result.validationCategory == nil)
     }
 
+    /// Devices differ on whether the nonce is signed as a digest or as a
+    /// message; both must verify.
+    @Test func acceptsNonceSignedAsMessage() throws {
+        let clientData = Data("payload".utf8)
+        let assertion = try AssertionFixture.make(key: key, clientData: clientData) {
+            $0.counter = 7
+            $0.signsNonceAsMessage = true
+        }
+
+        let result = try verifier.verify(
+            assertion: assertion,
+            clientData: clientData,
+            publicKey: key.publicKey,
+            previousSignCount: 6
+        )
+        #expect(result.signCount == 7)
+    }
+
     /// iOS 26 sets the `AT` flag in assertion authenticator data without
     /// appending a credential data section — a 37-byte payload must parse.
     @Test func acceptsIOS26AssertionWithSpuriousATFlag() throws {

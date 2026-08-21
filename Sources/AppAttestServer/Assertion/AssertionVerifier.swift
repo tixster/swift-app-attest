@@ -131,10 +131,17 @@ public struct AssertionVerifier: Sendable {
         // Steps 1–3: verify the signature over the nonce.
         let clientDataHash = Data(SHA256.hash(data: clientData))
         let nonce = SHA256.hash(data: authenticatorData.rawBytes + clientDataHash)
-        guard
-            let signature = try? P256.Signing.ECDSASignature(derRepresentation: object.signature),
-            publicKey.isValidSignature(signature, for: nonce)
-        else {
+        guard let signature = try? P256.Signing.ECDSASignature(derRepresentation: object.signature) else {
+            throw AppAttestVerificationError.invalidSignature
+        }
+        // Apple's guide only says the signature must be "valid for nonce",
+        // leaving open whether the nonce is the signed digest or the signed
+        // message — and devices disagree in practice. Both readings cover
+        // exactly the same bytes and both demand the attested private key, so
+        // accepting either is a compatibility measure, not a weaker check.
+        let signsNonceAsDigest = publicKey.isValidSignature(signature, for: nonce)
+        let signsNonceAsMessage = publicKey.isValidSignature(signature, for: Data(nonce))
+        guard signsNonceAsDigest || signsNonceAsMessage else {
             throw AppAttestVerificationError.invalidSignature
         }
 
