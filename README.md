@@ -50,7 +50,7 @@ And the flow, at a glance — enrollment (steps 1–3) happens once per app inst
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/tixster/swift-app-attest.git", from: "1.1.0"),
+    .package(url: "https://github.com/tixster/swift-app-attest.git", from: "1.2.0"),
 ],
 targets: [
     // In your app target:
