@@ -58,10 +58,21 @@ public struct ReceiptVerifier: Sendable {
         maximumCreationAge: TimeInterval? = nil,
         at date: Date = Date()
     ) async throws(AppAttestReceiptError) -> AppAttestReceipt {
+        // Apple encodes receipts in BER (indefinite lengths, chunked octet
+        // strings), а swift-certificates parses strict DER — normalize first.
+        // The signed regions are DER already and survive byte-for-byte, so
+        // signatures keep verifying; see ``BERNormalizer``.
+        let derReceipt: Data
+        do {
+            derReceipt = try BERNormalizer.normalizeToDER(receipt)
+        } catch {
+            throw AppAttestReceiptError.malformedReceipt(reason: "not valid BER: \(error)")
+        }
+
         // Verify the PKCS #7 signature and the signing chain up to the Apple root.
         let roots = configuration.receiptTrustRoots ?? [AppleTrustRoots.appleRootCAG3]
         let signatureResult = await CMS.isValidAttachedSignature(
-            signatureBytes: [UInt8](receipt),
+            signatureBytes: [UInt8](derReceipt),
             trustRoots: CertificateStore(roots)
         ) {
             RFC5280Policy()

@@ -73,6 +73,19 @@ public struct AuthenticatorData: Sendable, Hashable {
         public static let extensionData = Flags(rawValue: 0x80)
     }
 
+    /// What kind of App Attest object the authenticator data came from.
+    public enum Source: Sendable, Hashable {
+        /// An attestation object: the `AT` flag introduces an attested
+        /// credential data section.
+        case attestation
+        /// An assertion object: assertions never carry attested credential
+        /// data, so the `AT` flag doesn't introduce a section to parse.
+        /// iOS 26 sets the flag in assertions anyway — taking it literally
+        /// would reject a 37-byte payload as truncated or misread the
+        /// trailing extensions as credential data.
+        case assertion
+    }
+
     /// The exact bytes this structure was parsed from. Needed for the nonce
     /// computations during attestation and assertion verification.
     public let rawBytes: Data
@@ -102,8 +115,12 @@ public struct AuthenticatorData: Sendable, Hashable {
 
     /// Parses authenticator data from an attestation or assertion object.
     ///
+    /// - Parameters:
+    ///   - data: The raw authenticator data bytes.
+    ///   - source: Whether the bytes came from an attestation or an
+    ///     assertion; controls how the `AT` flag is interpreted.
     /// - Throws: ``AppAttestVerificationError/malformedAuthenticatorData(reason:)``.
-    public init(parsing data: Data) throws(AppAttestVerificationError) {
+    public init(parsing data: Data, source: Source = .attestation) throws(AppAttestVerificationError) {
         func fail(_ reason: String) -> AppAttestVerificationError {
             .malformedAuthenticatorData(reason: reason)
         }
@@ -121,7 +138,10 @@ public struct AuthenticatorData: Sendable, Hashable {
 
         var rest = Data(bytes[37...])
 
-        if flags.contains(.attestedCredentialData) {
+        // Only attestations carry the credential data section; see ``Source``.
+        let includesCredentialData = source == .attestation && flags.contains(.attestedCredentialData)
+
+        if includesCredentialData {
             guard rest.count >= 18 else {
                 throw fail("attested credential data is truncated")
             }
@@ -156,7 +176,7 @@ public struct AuthenticatorData: Sendable, Hashable {
         }
 
         let expectsExtensions = flags.contains(.extensionData)
-        switch (flags.contains(.attestedCredentialData), trailingItems.count) {
+        switch (includesCredentialData, trailingItems.count) {
         case (_, 0):
             guard !expectsExtensions else {
                 throw fail("ED flag is set but no extensions map is present")

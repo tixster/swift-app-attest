@@ -29,6 +29,44 @@ struct AssertionVerifierTests {
         #expect(result.validationCategory == nil)
     }
 
+    /// iOS 26 sets the `AT` flag in assertion authenticator data without
+    /// appending a credential data section — a 37-byte payload must parse.
+    @Test func acceptsIOS26AssertionWithSpuriousATFlag() throws {
+        let clientData = Data("payload".utf8)
+        let assertion = try AssertionFixture.make(key: key, clientData: clientData) {
+            $0.counter = 2
+            $0.spuriousAttestedCredentialDataFlag = true
+        }
+
+        let result = try verifier.verify(
+            assertion: assertion,
+            clientData: clientData,
+            publicKey: key.publicKey,
+            previousSignCount: 1
+        )
+        #expect(result.signCount == 2)
+    }
+
+    /// The same quirk combined with extensions: the trailing CBOR map must be
+    /// read as extensions, not misparsed as credential data.
+    @Test func acceptsIOS26AssertionWithSpuriousATFlagAndExtensions() throws {
+        let clientData = Data("payload".utf8)
+        let assertion = try AssertionFixture.make(key: key, clientData: clientData) {
+            $0.counter = 3
+            $0.spuriousAttestedCredentialDataFlag = true
+            $0.includeExtensions = true
+        }
+
+        let result = try verifier.verify(
+            assertion: assertion,
+            clientData: clientData,
+            publicKey: key.publicKey,
+            previousSignCount: 2
+        )
+        #expect(result.validationCategory == .appStore)
+        #expect(result.bundleVersion == "1.2.3")
+    }
+
     @Test func acceptsAssertionWithExtensions() throws {
         let clientData = Data("payload".utf8)
         let assertion = try AssertionFixture.make(key: key, clientData: clientData) {

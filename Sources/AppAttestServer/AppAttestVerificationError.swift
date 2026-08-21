@@ -38,8 +38,11 @@ public enum AppAttestVerificationError: Error, Sendable, Hashable {
     /// `SHA256(authData || SHA256(challenge))`.
     case nonceMismatch
 
-    /// The macOS access-control policy blob (OID 1.2.840.113635.100.8.6) doesn't
-    /// match the value Apple defines for SIP plus Full Security mode.
+    /// The access-control policy blob (OID 1.2.840.113635.100.8.6) doesn't
+    /// match the value Apple defines for macOS with SIP plus Full Security
+    /// mode. Only thrown when the opt-in
+    /// ``AppAttestConfiguration/validatesMacOSAccessControlPolicy`` check is
+    /// enabled; iOS attestations carry the extension with different contents.
     case accessControlPolicyMismatch
 
     /// `SHA256(credential certificate public key)` doesn't equal the key identifier.

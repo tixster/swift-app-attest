@@ -230,11 +230,13 @@ struct AttestationVerifierTests {
         }
     }
 
-    @Test func acceptsExpectedMacOSAccessControlPolicy() async throws {
+    @Test func acceptsExpectedMacOSAccessControlPolicyWhenEnabled() async throws {
         let fixture = try AttestationFixture.make {
             $0.aclBlob = AppleCertificateExtensions.expectedAccessControlPolicy
         }
-        let verifier = AttestationVerifier(configuration: fixture.configuration)
+        var configuration = fixture.configuration
+        configuration.validatesMacOSAccessControlPolicy = true
+        let verifier = AttestationVerifier(configuration: configuration)
 
         _ = try await verifier.verify(
             attestation: fixture.attestation,
@@ -243,11 +245,13 @@ struct AttestationVerifierTests {
         )
     }
 
-    @Test func rejectsUnexpectedMacOSAccessControlPolicy() async throws {
+    @Test func rejectsUnexpectedMacOSAccessControlPolicyWhenEnabled() async throws {
         let fixture = try AttestationFixture.make {
             $0.aclBlob = Data("weakened access policy".utf8)
         }
-        let verifier = AttestationVerifier(configuration: fixture.configuration)
+        var configuration = fixture.configuration
+        configuration.validatesMacOSAccessControlPolicy = true
+        let verifier = AttestationVerifier(configuration: configuration)
 
         await #expect(throws: AppAttestVerificationError.accessControlPolicyMismatch) {
             _ = try await verifier.verify(
@@ -258,13 +262,13 @@ struct AttestationVerifierTests {
         }
     }
 
-    @Test func canDisableMacOSAccessControlPolicyCheck() async throws {
+    /// iOS 26 carries `aclBlob` with platform-specific contents — the default
+    /// configuration must not reject such attestations.
+    @Test func ignoresForeignAccessControlPolicyByDefault() async throws {
         let fixture = try AttestationFixture.make {
-            $0.aclBlob = Data("weakened access policy".utf8)
+            $0.aclBlob = Data("iOS-style access policy".utf8)
         }
-        var configuration = fixture.configuration
-        configuration.validatesMacOSAccessControlPolicy = false
-        let verifier = AttestationVerifier(configuration: configuration)
+        let verifier = AttestationVerifier(configuration: fixture.configuration)
 
         _ = try await verifier.verify(
             attestation: fixture.attestation,

@@ -161,6 +161,9 @@ enum AssertionFixture {
         /// When set, the signature is produced over these bytes instead of the
         /// real nonce, yielding an invalid signature.
         var corruptSignature = false
+        /// iOS 26 sets the `AT` flag in assertion authenticator data without
+        /// appending an attested credential data section.
+        var spuriousAttestedCredentialDataFlag = false
     }
 
     static func make(
@@ -177,7 +180,11 @@ enum AssertionFixture {
 
         var authenticatorData = Data()
         authenticatorData += rpIdHash
-        authenticatorData.append(options.includeExtensions ? 0x80 : 0x00)
+        var flags: UInt8 = options.includeExtensions ? 0x80 : 0x00
+        if options.spuriousAttestedCredentialDataFlag {
+            flags |= 0x40
+        }
+        authenticatorData.append(flags)
         authenticatorData += options.counter.bigEndianBytes
         if options.includeExtensions {
             authenticatorData += TestCBOR.map([

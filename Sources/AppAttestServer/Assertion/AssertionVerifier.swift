@@ -45,7 +45,7 @@ public struct AssertionObject: Sendable, Hashable {
         guard let authData = root["authenticatorData"]?.bytesValue else {
             throw fail("missing authenticatorData entry")
         }
-        self.authenticatorData = try AuthenticatorData(parsing: authData)
+        self.authenticatorData = try AuthenticatorData(parsing: authData, source: .assertion)
     }
 }
 

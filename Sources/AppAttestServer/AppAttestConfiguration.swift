@@ -34,12 +34,18 @@ public struct AppAttestConfiguration: Sendable {
     /// or if Apple ever rotates the root.
     public var receiptTrustRoots: [Certificate]?
 
-    /// Whether to verify the macOS key access-control policy extension when
-    /// the credential certificate carries one.
+    /// Whether to verify the key access-control policy extension (`aclBlob`)
+    /// against the value Apple documents for macOS with SIP plus Full
+    /// Security mode.
     ///
-    /// Apple's validation guide requires attested macOS keys to have the exact
-    /// policy hash corresponding to SIP plus Full Security mode. Leave this
-    /// enabled unless you have a specific reason not to.
+    /// Enable this **only when every client is a macOS app**. The extension
+    /// is not macOS-exclusive: attestations from iOS 26 devices carry it too,
+    /// with platform-specific contents, and nothing in the attestation tells
+    /// the platforms apart — so with this check on, every legitimate iOS key
+    /// is rejected with
+    /// ``AppAttestVerificationError/accessControlPolicyMismatch``.
+    /// Apple's step-by-step attestation validation guide doesn't include this
+    /// comparison; it comes from the separate macOS guidance.
     public var validatesMacOSAccessControlPolicy: Bool
 
     /// The App ID: your Team ID, a period, and the bundle identifier.
@@ -59,14 +65,15 @@ public struct AppAttestConfiguration: Sendable {
     ///   - attestationTrustRoots: Overrides the App Attest root CA (tests only).
     ///   - receiptTrustRoots: Overrides the receipt root CA (tests only).
     ///   - validatesMacOSAccessControlPolicy: See
-    ///     ``validatesMacOSAccessControlPolicy``. Defaults to `true`.
+    ///     ``validatesMacOSAccessControlPolicy``. Defaults to `false`; enable
+    ///     only for macOS-only clients.
     public init(
         teamIdentifier: String,
         bundleIdentifier: String,
         environments: Set<AppAttestEnvironment> = [.production],
         attestationTrustRoots: [Certificate]? = nil,
         receiptTrustRoots: [Certificate]? = nil,
-        validatesMacOSAccessControlPolicy: Bool = true
+        validatesMacOSAccessControlPolicy: Bool = false
     ) {
         self.teamIdentifier = teamIdentifier
         self.bundleIdentifier = bundleIdentifier

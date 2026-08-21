@@ -157,7 +157,10 @@ public struct AttestationVerifier: Sendable {
             throw AppAttestVerificationError.nonceMismatch
         }
 
-        // macOS only: verify the key's access-control policy blob when present.
+        // Opt-in, macOS-only deployments: compare the key's access-control
+        // policy blob to the macOS SIP + Full Security value. iOS 26
+        // attestations carry the extension too, with different contents, so
+        // this must stay off for iOS clients.
         if configuration.validatesMacOSAccessControlPolicy {
             let policy: Data?
             do {
