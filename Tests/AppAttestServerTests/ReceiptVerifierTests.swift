@@ -50,6 +50,35 @@ struct ReceiptVerifierTests {
         #expect(receipt.riskMetric == 12)
     }
 
+    /// Apple emits receipts in BER: indefinite lengths on the container
+    /// spine and a chunked `eContent` OCTET STRING. Verification must accept
+    /// them — the CMS layer only understands strict DER, so the verifier
+    /// normalizes first.
+    @Test func acceptsBEREncodedReceipt() async throws {
+        let fixture = try ReceiptFixture.make()
+        let mangled = try BERMangler.mangle(fixture.receipt)
+        #expect(mangled != fixture.receipt)
+        let verifier = ReceiptVerifier(configuration: fixture.configuration)
+
+        let receipt = try await verifier.verify(
+            receipt: mangled,
+            expectedPublicKey: fixture.attestedKey.publicKey
+        )
+
+        #expect(receipt.appID == "TEAM123456.com.example.app")
+        #expect(receipt.riskMetric == 3)
+    }
+
+    @Test func normalizerRoundTripsBERBackToDER() throws {
+        let fixture = try ReceiptFixture.make()
+        let mangled = try BERMangler.mangle(fixture.receipt)
+
+        // DER in — the same DER out, byte for byte.
+        #expect(try BERNormalizer.normalizeToDER(fixture.receipt) == fixture.receipt)
+        // The BER variant normalizes back to exactly the original DER.
+        #expect(try BERNormalizer.normalizeToDER(mangled) == fixture.receipt)
+    }
+
     @Test func rejectsUntrustedSigner() async throws {
         let fixture = try ReceiptFixture.make()
         var configuration = fixture.configuration

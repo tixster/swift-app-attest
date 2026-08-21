@@ -59,9 +59,9 @@ public struct ReceiptVerifier: Sendable {
         at date: Date = Date()
     ) async throws(AppAttestReceiptError) -> AppAttestReceipt {
         // Apple encodes receipts in BER (indefinite lengths, chunked octet
-        // strings), а swift-certificates parses strict DER — normalize first.
-        // The signed regions are DER already and survive byte-for-byte, so
-        // signatures keep verifying; see ``BERNormalizer``.
+        // strings) while swift-certificates parses strict DER — normalize
+        // first. The signed regions are DER already and survive
+        // byte-for-byte, so signatures keep verifying; see ``BERNormalizer``.
         let derReceipt: Data
         do {
             derReceipt = try BERNormalizer.normalizeToDER(receipt)

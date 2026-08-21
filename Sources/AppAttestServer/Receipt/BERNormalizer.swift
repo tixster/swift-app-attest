@@ -53,7 +53,9 @@ enum BERNormalizer {
 
     private static func flattenOctetString(_ node: ASN1Node) throws -> [UInt8] {
         guard node.identifier == .octetString else {
-            throw ASN1Error.unexpectedFieldType(node.identifier)
+            throw ASN1Error.invalidASN1Object(
+                reason: "constructed OCTET STRING chunk has identifier \(node.identifier)"
+            )
         }
         switch node.content {
         case .primitive(let bytes):
